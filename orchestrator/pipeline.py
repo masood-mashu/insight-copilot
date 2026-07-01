@@ -41,6 +41,7 @@ def run_pipeline(df: pd.DataFrame) -> dict:
     recommendation_output = run_recommender_agent(
         insight_output=insight_output,
         memory_output=memory_output,
+        profiler_output=profiler_output,
     )
 
     report = {

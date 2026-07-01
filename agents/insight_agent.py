@@ -115,6 +115,22 @@ def _fallback_insight_output(profiler_output: dict[str, Any]) -> dict:
     n_cols = int(profiler_output.get("n_cols", 0))
     columns = profiler_output.get("columns", [])
     duplicate_rows = int(profiler_output.get("duplicate_rows", 0))
+    categorical_candidates = [
+        column
+        for column in columns
+        if isinstance(column, dict)
+        and "stats" not in column
+        and int(column.get("unique_count", 0)) > 1
+        and int(column.get("unique_count", 0)) <= 10
+    ]
+    binary_or_low_card_numeric = [
+        column
+        for column in columns
+        if isinstance(column, dict)
+        and "stats" in column
+        and int(column.get("unique_count", 0)) > 1
+        and int(column.get("unique_count", 0)) <= 5
+    ]
 
     high_null_columns = [
         column["name"]
@@ -139,6 +155,30 @@ def _fallback_insight_output(profiler_output: dict[str, Any]) -> dict:
                 "detail": f"The dataset contains {duplicate_rows} duplicate rows that may affect analysis quality.",
             }
         )
+    if categorical_candidates:
+        label_name = str(categorical_candidates[0].get("name", "label"))
+        label_count = int(categorical_candidates[0].get("unique_count", 0))
+        findings.append(
+            {
+                "type": "pattern",
+                "detail": (
+                    f"The column '{label_name}' has {label_count} distinct categories and may be a natural target "
+                    "or grouping variable for classification and comparison plots."
+                ),
+            }
+        )
+    elif binary_or_low_card_numeric:
+        label_name = str(binary_or_low_card_numeric[0].get("name", "label"))
+        label_count = int(binary_or_low_card_numeric[0].get("unique_count", 0))
+        findings.append(
+            {
+                "type": "pattern",
+                "detail": (
+                    f"The numeric column '{label_name}' has only {label_count} distinct values, which suggests a "
+                    "classification-style target or segmentation variable."
+                ),
+            }
+        )
     if not findings:
         findings.append(
             {
@@ -147,9 +187,19 @@ def _fallback_insight_output(profiler_output: dict[str, Any]) -> dict:
             }
         )
 
-    summary = (
-        f"This dataset contains {n_rows} rows and {n_cols} columns. "
-        "The current overview is based on schema, completeness, uniqueness, and basic numeric summaries."
-    )
+    summary = f"This dataset contains {n_rows} rows and {n_cols} columns. "
+    if categorical_candidates:
+        summary += (
+            f"It mixes measured features with a low-cardinality categorical column like "
+            f"'{categorical_candidates[0].get('name', 'label')}', which makes it a good fit for grouped analysis "
+            "or classification-style exploration. "
+        )
+    elif binary_or_low_card_numeric:
+        summary += (
+            f"It includes a low-cardinality numeric field like '{binary_or_low_card_numeric[0].get('name', 'label')}', "
+            "which may serve as a target or segment variable. "
+        )
+    else:
+        summary += "The current overview is based on schema, completeness, uniqueness, and basic numeric summaries."
 
     return {"summary": summary, "findings": findings[:3]}
