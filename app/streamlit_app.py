@@ -15,6 +15,14 @@ from utils.qdrant_client import ensure_collection, get_qdrant_client
 
 load_dotenv()
 
+# Inject Streamlit secrets into environment variables for Hugging Face Spaces compatibility
+try:
+    for secret_key in ["GEMINI_API_KEY", "QDRANT_URL", "QDRANT_API_KEY", "GEMINI_MODEL"]:
+        if secret_key in st.secrets:
+            os.environ[secret_key] = st.secrets[secret_key]
+except Exception:
+    pass
+
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 USE_LOCAL_PIPELINE = os.getenv("USE_LOCAL_PIPELINE", "true").strip().lower() not in {
     "0",
