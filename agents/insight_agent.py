@@ -64,11 +64,11 @@ def run_insight_agent(profiler_output: ProfilerOutput) -> InsightPayload:
         A dictionary with keys `summary` and `findings`, where `findings` is a
         list of objects containing `type` and `detail`.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = _get_gemini_api_key()
     if not api_key:
-        logger.warning("GEMINI_API_KEY is not configured; returning fallback insight output")
+        logger.warning("GEMINI_API_KEY/GOOGLE_API_KEY is not configured; returning fallback insight output")
         fallback = _fallback_insight_output(profiler_output)
-        fallback["error_details"] = "GEMINI_API_KEY environment variable is not configured."
+        fallback["error_details"] = "Neither GEMINI_API_KEY nor GOOGLE_API_KEY is configured."
         return fallback
 
     client = genai.Client(api_key=api_key)
@@ -242,3 +242,10 @@ def _fallback_insight_output(profiler_output: ProfilerOutput) -> InsightPayload:
 
 def _empty_profiler_output() -> ProfilerOutput:
     return {"n_rows": 0, "n_cols": 0, "columns": [], "duplicate_rows": 0}
+
+
+def _get_gemini_api_key() -> str:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key:
+        return api_key
+    return os.getenv("GOOGLE_API_KEY", "")

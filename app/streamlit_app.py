@@ -17,9 +17,11 @@ load_dotenv()
 
 # Inject Streamlit secrets into environment variables for Hugging Face Spaces compatibility
 try:
-    for secret_key in ["GEMINI_API_KEY", "QDRANT_URL", "QDRANT_API_KEY", "GEMINI_MODEL"]:
+    for secret_key in ["GEMINI_API_KEY", "GOOGLE_API_KEY", "QDRANT_URL", "QDRANT_API_KEY", "GEMINI_MODEL"]:
         if secret_key in st.secrets:
             os.environ[secret_key] = st.secrets[secret_key]
+    if "GEMINI_API_KEY" not in os.environ and "GOOGLE_API_KEY" in os.environ:
+        os.environ["GEMINI_API_KEY"] = os.environ["GOOGLE_API_KEY"]
 except Exception:
     pass
 

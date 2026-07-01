@@ -181,12 +181,16 @@ def _infer_target_hint(
         and 1 < int(column.get("unique_count", 0)) <= 10
     ]
     if categorical_candidates:
-        candidate = categorical_candidates[0]
-        return {
-            "kind": "categorical_target",
-            "name": str(candidate.get("name", "label")),
-            "unique_count": int(candidate.get("unique_count", 0)),
-        }
+        target_like_keywords = ("target", "label", "class", "outcome", "response", "y")
+        for candidate in categorical_candidates:
+            candidate_name = str(candidate.get("name", "label"))
+            normalized_name = candidate_name.lower()
+            if any(keyword in normalized_name for keyword in target_like_keywords):
+                return {
+                    "kind": "categorical_target",
+                    "name": candidate_name,
+                    "unique_count": int(candidate.get("unique_count", 0)),
+                }
 
     low_card_numeric = [
         column
@@ -198,11 +202,13 @@ def _infer_target_hint(
     ]
     if low_card_numeric:
         candidate = low_card_numeric[0]
-        return {
-            "kind": "categorical_target",
-            "name": str(candidate.get("name", "label")),
-            "unique_count": int(candidate.get("unique_count", 0)),
-        }
+        candidate_name = str(candidate.get("name", "label"))
+        if any(keyword in candidate_name.lower() for keyword in ("target", "label", "class", "outcome", "response", "y")):
+            return {
+                "kind": "categorical_target",
+                "name": candidate_name,
+                "unique_count": int(candidate.get("unique_count", 0)),
+            }
 
     return _infer_target_hint_from_findings(findings)
 
