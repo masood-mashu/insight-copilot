@@ -24,7 +24,7 @@ USE_LOCAL_PIPELINE = os.getenv("USE_LOCAL_PIPELINE", "true").strip().lower() not
 
 st.set_page_config(
     page_title="Insight Copilot",
-    page_icon="IC",
+    page_icon="📊",
     layout="wide",
 )
 
@@ -139,6 +139,13 @@ def _fetch_history_from_qdrant() -> list[dict]:
 
 
 def _render_report(report: dict) -> None:
+    if report["insight"].get("degraded"):
+        st.warning(
+            "⚠️ The Insight Agent returned degraded output for this run. "
+            "The Gemini API may have timed out or returned an unparseable response. "
+            "Re-run the analysis for richer findings."
+        )
+
     st.subheader("Summary")
     st.write(report["insight"]["summary"])
 

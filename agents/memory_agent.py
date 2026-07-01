@@ -91,6 +91,24 @@ def run_memory_agent(profiler_output: dict) -> dict:
         }
 
 
+def update_memory_notes(profiler_output: dict, insight_summary: str) -> None:
+    """Update the stored Qdrant point with a short insight summary for future recall."""
+    if not insight_summary:
+        return
+    try:
+        client = get_qdrant_client()
+        signature_text = _build_signature_text(profiler_output)
+        point_id = str(uuid5(NAMESPACE_URL, signature_text))
+        client.set_payload(
+            collection_name=COLLECTION_NAME,
+            payload={"notes": insight_summary[:200]},
+            points=[point_id],
+        )
+        logger.debug("Updated memory notes for point %s", point_id)
+    except Exception:
+        logger.exception("Failed to update memory notes")
+
+
 def _get_embedding_model() -> SentenceTransformer:
     global _embedding_model, _embedding_model_error
     if _embedding_model is None:

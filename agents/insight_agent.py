@@ -68,12 +68,14 @@ def run_insight_agent(profiler_output: dict) -> dict:
                     ),
                 ),
             )
-            validated = _validate_insight_output(response.parsed)
+            logger.info("Gemini raw response (attempt %s): %.500s", attempt + 1, response.text)
+            validated = _validate_insight_output(response.parsed, profiler_output)
             logger.debug("Insight agent completed on attempt %s", attempt + 1)
             return validated
         except Exception:
             logger.exception("Insight agent attempt %s failed", attempt + 1)
 
+    logger.warning("All Gemini attempts exhausted; returning degraded fallback output")
     return _fallback_insight_output(profiler_output)
 
 
@@ -87,7 +89,7 @@ def _build_prompt(profiler_output: dict[str, Any]) -> str:
     )
 
 
-def _validate_insight_output(payload: Any) -> dict:
+def _validate_insight_output(payload: Any, profiler_output: dict | None = None) -> dict:
     if isinstance(payload, InsightResponse):
         insight = payload
     elif isinstance(payload, dict):
@@ -101,18 +103,25 @@ def _validate_insight_output(payload: Any) -> dict:
         if item.type in ALLOWED_FINDING_TYPES and item.detail.strip()
     ]
 
+    findings_degraded = False
     if not normalized_findings:
-        normalized_findings = _fallback_insight_output({})["findings"]
+        logger.warning("All Gemini findings filtered out; substituting fallback findings")
+        normalized_findings = _fallback_insight_output(profiler_output or {})["findings"]
+        findings_degraded = True
 
-    return {
+    result = {
         "summary": insight.summary.strip(),
         "findings": normalized_findings,
     }
+    if findings_degraded:
+        result["degraded"] = True
+    return result
 
 
 def _fallback_insight_output(profiler_output: dict[str, Any]) -> dict:
     n_rows = int(profiler_output.get("n_rows", 0))
     n_cols = int(profiler_output.get("n_cols", 0))
+    logger.info("Fallback insight path invoked for %d-row, %d-col dataset", n_rows, n_cols)
     columns = profiler_output.get("columns", [])
     duplicate_rows = int(profiler_output.get("duplicate_rows", 0))
     categorical_candidates = [
@@ -202,4 +211,4 @@ def _fallback_insight_output(profiler_output: dict[str, Any]) -> dict:
     else:
         summary += "The current overview is based on schema, completeness, uniqueness, and basic numeric summaries."
 
-    return {"summary": summary, "findings": findings[:3]}
+    return {"summary": summary, "findings": findings[:3], "degraded": True}

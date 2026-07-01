@@ -9,7 +9,7 @@ from typing import Any
 import pandas as pd
 
 from agents.insight_agent import run_insight_agent
-from agents.memory_agent import run_memory_agent
+from agents.memory_agent import run_memory_agent, update_memory_notes
 from agents.profiler_agent import run_profiler_agent
 from agents.recommender_agent import run_recommender_agent
 
@@ -38,6 +38,12 @@ def run_pipeline(df: pd.DataFrame) -> dict:
     insight_output, memory_output = asyncio.run(
         _run_parallel_agents(profiler_output=profiler_output)
     )
+
+    try:
+        update_memory_notes(profiler_output, insight_output.get("summary", ""))
+    except Exception:
+        logger.debug("Memory notes update skipped")
+
     recommendation_output = run_recommender_agent(
         insight_output=insight_output,
         memory_output=memory_output,
