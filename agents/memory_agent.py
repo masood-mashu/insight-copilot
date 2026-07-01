@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid5, NAMESPACE_URL
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from qdrant_client.http.models import PointStruct
 from sentence_transformers import SentenceTransformer
@@ -56,15 +56,19 @@ def run_memory_agent(profiler_output: dict) -> dict:
             for hit in search_results
         ]
 
+        has_match = bool(similar_past_datasets) and float(similar_past_datasets[0]["similarity"]) >= SIMILARITY_THRESHOLD
+        memory_point_id = str(uuid4())
+
         client.upsert(
             collection_name=COLLECTION_NAME,
             points=[
                 PointStruct(
-                    id=str(uuid5(NAMESPACE_URL, signature_text)),
+                    id=memory_point_id,
                     vector=embedding,
                     payload={
                         "dataset_signature": dataset_signature,
                         "signature_text": signature_text,
+                        "memory_point_id": memory_point_id,
                         "notes": "",
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
@@ -75,6 +79,8 @@ def run_memory_agent(profiler_output: dict) -> dict:
         return {
             "embedded": True,
             "dataset_signature": dataset_signature,
+            "has_match": has_match,
+            "memory_point_id": memory_point_id,
             "similar_past_datasets": similar_past_datasets,
             "retrieved_context": _build_retrieved_context(
                 similar_past_datasets=similar_past_datasets,
@@ -85,19 +91,23 @@ def run_memory_agent(profiler_output: dict) -> dict:
         return {
             "embedded": False,
             "dataset_signature": dataset_signature,
+            "has_match": False,
+            "memory_point_id": None,
             "similar_past_datasets": [],
             "retrieved_context": f"Memory storage unavailable: {exc}",
         }
 
 
-def update_memory_notes(profiler_output: dict, insight_summary: str) -> None:
+def update_memory_notes(profiler_output: dict, insight_summary: str, memory_point_id: str | None = None) -> None:
     """Update the stored Qdrant point with a short insight summary for future recall."""
     if not insight_summary:
         return
     try:
         client = get_qdrant_client()
-        signature_text = _build_signature_text(profiler_output)
-        point_id = str(uuid5(NAMESPACE_URL, signature_text))
+        point_id = memory_point_id
+        if not point_id:
+            signature_text = _build_signature_text(profiler_output)
+            point_id = str(uuid5(NAMESPACE_URL, signature_text))
         client.set_payload(
             collection_name=COLLECTION_NAME,
             payload={"notes": insight_summary[:200]},

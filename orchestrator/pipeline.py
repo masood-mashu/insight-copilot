@@ -40,7 +40,11 @@ def run_pipeline(df: pd.DataFrame) -> dict:
     )
 
     try:
-        update_memory_notes(profiler_output, insight_output.get("summary", ""))
+        update_memory_notes(
+            profiler_output,
+            insight_output.get("summary", ""),
+            memory_output.get("memory_point_id"),
+        )
     except Exception:
         logger.debug("Memory notes update skipped")
 

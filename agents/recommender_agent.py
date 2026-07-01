@@ -31,12 +31,13 @@ def run_recommender_agent(
     findings = insight_output.get("findings", [])
     dataset_signature = str(memory_output.get("dataset_signature", "unknown-dataset"))
     retrieved_context = str(memory_output.get("retrieved_context", ""))
+    memory_has_match = bool(memory_output.get("has_match", False))
     target_hint = _infer_target_hint(profiler_output, findings)
 
     cleaning_steps = _build_cleaning_steps(findings, target_hint)
     suggested_models = _build_models(dataset_signature, findings, target_hint)
     visualization_suggestions = _build_visualizations(findings, target_hint)
-    suggested_approach = _build_approach(dataset_signature, retrieved_context, target_hint)
+    suggested_approach = _build_approach(dataset_signature, memory_has_match, target_hint)
 
     return {
         "suggested_approach": suggested_approach,
@@ -147,18 +148,13 @@ def _build_visualizations(
 
 def _build_approach(
     dataset_signature: str,
-    retrieved_context: str,
+    has_match: bool,
     target_hint: dict[str, Any] | None,
 ) -> str:
     task_hint = dataset_signature
     if target_hint and target_hint.get("kind") == "categorical_target":
         task_hint = f"{target_hint['name']} classification on {dataset_signature}"
-    normalized_context = retrieved_context.lower()
-    if "memory storage unavailable" in normalized_context:
-        return f"Start with general-purpose exploratory analysis and baseline modeling for {task_hint}"
-    if "no similar dataset found" in normalized_context:
-        return f"Start with general-purpose exploratory analysis and baseline modeling for {task_hint}"
-    if "no highly similar dataset found" in normalized_context:
+    if not has_match:
         return f"Start with general-purpose exploratory analysis and baseline modeling for {task_hint}"
     return (
         f"Leverage prior memory from similar datasets and begin with a baseline workflow tailored to {task_hint}"
