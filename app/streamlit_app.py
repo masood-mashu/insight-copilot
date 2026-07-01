@@ -16,7 +16,11 @@ from utils.qdrant_client import ensure_collection, get_qdrant_client
 load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-USE_LOCAL_PIPELINE = os.getenv("USE_LOCAL_PIPELINE", "false").lower() == "true"
+USE_LOCAL_PIPELINE = os.getenv("USE_LOCAL_PIPELINE", "true").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
 
 st.set_page_config(
     page_title="Insight Copilot",
