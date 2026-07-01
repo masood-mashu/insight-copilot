@@ -1,6 +1,6 @@
 ---
 title: Insight Copilot
-emoji: IC
+emoji: 📊
 colorFrom: blue
 colorTo: green
 sdk: streamlit
