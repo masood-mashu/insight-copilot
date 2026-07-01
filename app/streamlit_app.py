@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import io
 import os
 
+import pandas as pd
 import requests
 import streamlit as st
 from dotenv import load_dotenv
 
+from orchestrator.pipeline import run_pipeline
+from utils.qdrant_client import ensure_collection, get_qdrant_client
+
 load_dotenv()
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+USE_LOCAL_PIPELINE = os.getenv("USE_LOCAL_PIPELINE", "false").lower() == "true"
 
 st.set_page_config(
     page_title="Insight Copilot",
@@ -38,19 +44,10 @@ def main() -> None:
 
     if st.button("Analyze Dataset", type="primary"):
         with st.status("Running Insight Copilot pipeline...", expanded=True) as status:
-            st.write("Uploading dataset to the API...")
-            response = requests.post(
-                f"{API_BASE_URL}/analyze",
-                files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")},
-                timeout=300,
-            )
-            if not response.ok:
-                st.error(f"API returned {response.status_code}")
-                st.code(_format_backend_error(response), language="json")
+            report = _analyze_uploaded_csv(uploaded_file, status)
+            if report is None:
                 status.update(label="Pipeline failed", state="error")
                 return
-
-            report = response.json()
 
             st.write("Profiler Agent complete")
             st.json(report["profiler"])
@@ -66,11 +63,73 @@ def main() -> None:
 
 
 def _fetch_history() -> list[dict]:
+    if USE_LOCAL_PIPELINE:
+        return _fetch_history_from_qdrant()
+
     try:
         response = requests.get(f"{API_BASE_URL}/memory/history", timeout=30)
         response.raise_for_status()
         payload = response.json()
         return payload.get("history", [])
+    except Exception:
+        return []
+
+
+def _analyze_uploaded_csv(uploaded_file, status) -> dict | None:
+    if USE_LOCAL_PIPELINE:
+        return _run_local_pipeline(uploaded_file, status)
+    return _run_api_pipeline(uploaded_file, status)
+
+
+def _run_local_pipeline(uploaded_file, status) -> dict | None:
+    try:
+        st.write("Reading uploaded CSV...")
+        df = pd.read_csv(io.BytesIO(uploaded_file.getvalue()))
+        st.write("Running local agent pipeline...")
+        return run_pipeline(df)
+    except Exception as exc:
+        st.error("Local pipeline failed")
+        st.code(str(exc), language="text")
+        return None
+
+
+def _run_api_pipeline(uploaded_file, status) -> dict | None:
+    st.write("Uploading dataset to the API...")
+    response = requests.post(
+        f"{API_BASE_URL}/analyze",
+        files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")},
+        timeout=300,
+    )
+    if not response.ok:
+        st.error(f"API returned {response.status_code}")
+        st.code(_format_backend_error(response), language="json")
+        return None
+    return response.json()
+
+
+def _fetch_history_from_qdrant() -> list[dict]:
+    try:
+        client = get_qdrant_client()
+        ensure_collection(client)
+        scroll_result = client.scroll(
+            collection_name="insight_copilot_datasets",
+            with_payload=True,
+            with_vectors=False,
+            limit=100,
+        )
+        points = scroll_result[0] if isinstance(scroll_result, tuple) else scroll_result
+        history = []
+        for point in points:
+            payload = point.payload or {}
+            history.append(
+                {
+                    "signature": str(payload.get("dataset_signature", "unknown-dataset")),
+                    "timestamp": str(payload.get("timestamp", "")),
+                    "notes": str(payload.get("notes", "")),
+                }
+            )
+        history.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
+        return history
     except Exception:
         return []
 

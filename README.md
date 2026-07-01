@@ -1,3 +1,14 @@
+---
+title: Insight Copilot
+emoji: IC
+colorFrom: blue
+colorTo: green
+sdk: streamlit
+sdk_version: 1.47.1
+app_file: app/streamlit_app.py
+pinned: false
+---
+
 # Insight Copilot
 
 Insight Copilot is a multi-agent exploratory data analysis assistant built for a hackathon demo. Upload a CSV and the system profiles the dataset, generates plain-English insights, checks long-term vector memory for similar prior datasets, and recommends next analytical steps.
@@ -20,17 +31,28 @@ Insight Copilot is a multi-agent exploratory data analysis assistant built for a
 pip install -r requirements.txt
 ```
 
-3. Start the API:
+3. For the simplest single-process local or deployed demo, set:
 
 ```bash
-uvicorn api.main:app --reload
+USE_LOCAL_PIPELINE=true
 ```
 
-4. Start the Streamlit app:
+Then start Streamlit:
 
 ```bash
 streamlit run app/streamlit_app.py
 ```
+
+4. For API mode, set `USE_LOCAL_PIPELINE=false`, start the API, then start Streamlit:
+
+```bash
+uvicorn api.main:app --reload
+streamlit run app/streamlit_app.py
+```
+
+## Deployment
+
+For Hugging Face Spaces or Streamlit Cloud, deploy only the Streamlit app and set `USE_LOCAL_PIPELINE=true` in secrets. The FastAPI app remains available in the repo for local API testing and technical review, but the hosted demo does not need a second process.
 
 ## API endpoints
 
