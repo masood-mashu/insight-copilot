@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Literal
+from typing import Any, Literal, NotRequired, TypedDict
 
 from google import genai
 from google.genai import types
@@ -30,7 +30,31 @@ class InsightResponse(BaseModel):
     findings: list[Finding]
 
 
-def run_insight_agent(profiler_output: dict) -> dict:
+class ProfilerColumn(TypedDict):
+    name: str
+    dtype: str
+    null_count: int
+    null_pct: float
+    unique_count: int
+    sample_values: list[Any]
+    stats: NotRequired[dict[str, Any]]
+
+
+class ProfilerOutput(TypedDict):
+    n_rows: int
+    n_cols: int
+    columns: list[ProfilerColumn]
+    duplicate_rows: int
+
+
+class InsightPayload(TypedDict):
+    summary: str
+    findings: list[dict[str, str]]
+    degraded: NotRequired[bool]
+    error_details: NotRequired[str]
+
+
+def run_insight_agent(profiler_output: ProfilerOutput) -> InsightPayload:
     """Generate plain-English insights from profiler output.
 
     Args:
@@ -40,9 +64,6 @@ def run_insight_agent(profiler_output: dict) -> dict:
         A dictionary with keys `summary` and `findings`, where `findings` is a
         list of objects containing `type` and `detail`.
     """
-    if not isinstance(profiler_output, dict):
-        raise TypeError("profiler_output must be a dict")
-
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         logger.warning("GEMINI_API_KEY is not configured; returning fallback insight output")
@@ -53,7 +74,7 @@ def run_insight_agent(profiler_output: dict) -> dict:
     client = genai.Client(api_key=api_key)
     prompt = _build_prompt(profiler_output)
 
-    errors = []
+    errors: list[str] = []
     for attempt in range(2):
         try:
             response = client.models.generate_content(
@@ -85,7 +106,7 @@ def run_insight_agent(profiler_output: dict) -> dict:
     return fallback
 
 
-def _build_prompt(profiler_output: dict[str, Any]) -> str:
+def _build_prompt(profiler_output: ProfilerOutput) -> str:
     return (
         "Analyze this dataset profile and produce a concise 2-3 sentence overview "
         "plus 1-3 findings. Prefer issues that can be inferred directly from the profile. "
@@ -95,7 +116,7 @@ def _build_prompt(profiler_output: dict[str, Any]) -> str:
     )
 
 
-def _validate_insight_output(payload: Any, profiler_output: dict | None = None) -> dict:
+def _validate_insight_output(payload: Any, profiler_output: ProfilerOutput | None = None) -> InsightPayload:
     if isinstance(payload, InsightResponse):
         insight = payload
     elif isinstance(payload, dict):
@@ -103,7 +124,7 @@ def _validate_insight_output(payload: Any, profiler_output: dict | None = None) 
     else:
         raise ValueError("Insight response must be a JSON object")
 
-    normalized_findings = [
+    normalized_findings: list[dict[str, str]] = [
         {"type": item.type, "detail": item.detail.strip()}
         for item in insight.findings[:3]
         if item.type in ALLOWED_FINDING_TYPES and item.detail.strip()
@@ -112,10 +133,10 @@ def _validate_insight_output(payload: Any, profiler_output: dict | None = None) 
     findings_degraded = False
     if not normalized_findings:
         logger.warning("All Gemini findings filtered out; substituting fallback findings")
-        normalized_findings = _fallback_insight_output(profiler_output or {})["findings"]
+        normalized_findings = _fallback_insight_output(profiler_output or _empty_profiler_output())["findings"]
         findings_degraded = True
 
-    result = {
+    result: InsightPayload = {
         "summary": insight.summary.strip(),
         "findings": normalized_findings,
     }
@@ -125,25 +146,23 @@ def _validate_insight_output(payload: Any, profiler_output: dict | None = None) 
     return result
 
 
-def _fallback_insight_output(profiler_output: dict[str, Any]) -> dict:
+def _fallback_insight_output(profiler_output: ProfilerOutput) -> InsightPayload:
     n_rows = int(profiler_output.get("n_rows", 0))
     n_cols = int(profiler_output.get("n_cols", 0))
     logger.info("Fallback insight path invoked for %d-row, %d-col dataset", n_rows, n_cols)
-    columns = profiler_output.get("columns", [])
+    columns: list[ProfilerColumn] = list(profiler_output.get("columns", []))
     duplicate_rows = int(profiler_output.get("duplicate_rows", 0))
     categorical_candidates = [
         column
         for column in columns
-        if isinstance(column, dict)
-        and "stats" not in column
+        if "stats" not in column
         and int(column.get("unique_count", 0)) > 1
         and int(column.get("unique_count", 0)) <= 10
     ]
     binary_or_low_card_numeric = [
         column
         for column in columns
-        if isinstance(column, dict)
-        and "stats" in column
+        if "stats" in column
         and int(column.get("unique_count", 0)) > 1
         and int(column.get("unique_count", 0)) <= 5
     ]
@@ -151,10 +170,10 @@ def _fallback_insight_output(profiler_output: dict[str, Any]) -> dict:
     high_null_columns = [
         column["name"]
         for column in columns
-        if isinstance(column, dict) and float(column.get("null_pct", 0.0)) >= 20.0
+        if float(column.get("null_pct", 0.0)) >= 20.0
     ]
 
-    findings = []
+    findings: list[dict[str, str]] = []
     if high_null_columns:
         findings.append(
             {
@@ -219,3 +238,7 @@ def _fallback_insight_output(profiler_output: dict[str, Any]) -> dict:
         summary += "The current overview is based on schema, completeness, uniqueness, and basic numeric summaries."
 
     return {"summary": summary, "findings": findings[:3], "degraded": True}
+
+
+def _empty_profiler_output() -> ProfilerOutput:
+    return {"n_rows": 0, "n_cols": 0, "columns": [], "duplicate_rows": 0}

@@ -26,9 +26,10 @@ def run_profiler_agent(df: pd.DataFrame) -> dict:
     n_rows, n_cols = df.shape
 
     numeric_summary = df.describe(include="number") if not df.empty else pd.DataFrame()
+    numeric_summary_index = 0
 
-    for column_name in df.columns:
-        series = df[column_name]
+    for column_index, column_name in enumerate(df.columns):
+        series = df.iloc[:, column_index]
         non_null_series = series.dropna()
         unique_values = []
         if not non_null_series.empty:
@@ -43,8 +44,9 @@ def run_profiler_agent(df: pd.DataFrame) -> dict:
             "sample_values": unique_values,
         }
 
-        if pd.api.types.is_numeric_dtype(series) and column_name in numeric_summary.columns:
-            stats_row = numeric_summary[column_name]
+        if pd.api.types.is_numeric_dtype(series) and numeric_summary_index < len(numeric_summary.columns):
+            stats_row = numeric_summary.iloc[:, numeric_summary_index]
+            numeric_summary_index += 1
             column_profile["stats"] = {
                 "mean": _to_python_value(stats_row.get("mean")),
                 "std": _to_python_value(stats_row.get("std")),

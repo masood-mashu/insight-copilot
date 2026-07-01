@@ -19,7 +19,6 @@ EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 VECTOR_SIZE = 384
 SIMILARITY_THRESHOLD = 0.8
 _embedding_model: SentenceTransformer | None = None
-_embedding_model_error: RuntimeError | None = None
 
 
 def run_memory_agent(profiler_output: dict) -> dict:
@@ -110,17 +109,12 @@ def update_memory_notes(profiler_output: dict, insight_summary: str) -> None:
 
 
 def _get_embedding_model() -> SentenceTransformer:
-    global _embedding_model, _embedding_model_error
+    global _embedding_model
     if _embedding_model is None:
-        if _embedding_model_error is not None:
-            raise _embedding_model_error
         try:
             _embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
         except Exception as exc:
-            _embedding_model_error = RuntimeError(
-                f"Embedding model '{EMBEDDING_MODEL_NAME}' is unavailable: {exc}"
-            )
-            raise _embedding_model_error from exc
+            raise RuntimeError(f"Embedding model '{EMBEDDING_MODEL_NAME}' is unavailable: {exc}") from exc
     return _embedding_model
 
 

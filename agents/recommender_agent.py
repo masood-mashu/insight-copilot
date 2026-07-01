@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -55,7 +56,7 @@ def _build_cleaning_steps(findings: list[Any], target_hint: dict[str, Any] | Non
 
     if "missing" in anomaly_text or "null" in anomaly_text:
         steps.append("Review high-missing columns and impute or drop them based on business value")
-    if "zero" in anomaly_text or "0" in anomaly_text:
+    if "zero" in anomaly_text or re.search(r"(^|[^0-9.])0([^0-9.]|$)", anomaly_text):
         steps.append("Treat biologically implausible zero values as missing before modeling")
     if "outlier" in anomaly_text or "skew" in anomaly_text:
         steps.append("Review skewed numeric columns and cap or transform extreme outliers")
