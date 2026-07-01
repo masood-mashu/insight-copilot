@@ -46,11 +46,14 @@ def run_insight_agent(profiler_output: dict) -> dict:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         logger.warning("GEMINI_API_KEY is not configured; returning fallback insight output")
-        return _fallback_insight_output(profiler_output)
+        fallback = _fallback_insight_output(profiler_output)
+        fallback["error_details"] = "GEMINI_API_KEY environment variable is not configured."
+        return fallback
 
     client = genai.Client(api_key=api_key)
     prompt = _build_prompt(profiler_output)
 
+    errors = []
     for attempt in range(2):
         try:
             response = client.models.generate_content(
@@ -72,11 +75,14 @@ def run_insight_agent(profiler_output: dict) -> dict:
             validated = _validate_insight_output(response.parsed, profiler_output)
             logger.debug("Insight agent completed on attempt %s", attempt + 1)
             return validated
-        except Exception:
+        except Exception as exc:
             logger.exception("Insight agent attempt %s failed", attempt + 1)
+            errors.append(f"Attempt {attempt + 1}: {type(exc).__name__}: {str(exc)}")
 
     logger.warning("All Gemini attempts exhausted; returning degraded fallback output")
-    return _fallback_insight_output(profiler_output)
+    fallback = _fallback_insight_output(profiler_output)
+    fallback["error_details"] = " | ".join(errors)
+    return fallback
 
 
 def _build_prompt(profiler_output: dict[str, Any]) -> str:
@@ -115,6 +121,7 @@ def _validate_insight_output(payload: Any, profiler_output: dict | None = None) 
     }
     if findings_degraded:
         result["degraded"] = True
+        result["error_details"] = "All Gemini findings were filtered out or empty."
     return result
 
 

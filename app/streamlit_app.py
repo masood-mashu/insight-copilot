@@ -140,9 +140,11 @@ def _fetch_history_from_qdrant() -> list[dict]:
 
 def _render_report(report: dict) -> None:
     if report["insight"].get("degraded"):
+        err_msg = report["insight"].get("error_details", "No error details available.")
         st.warning(
-            "⚠️ The Insight Agent returned degraded output for this run. "
-            "The Gemini API may have timed out or returned an unparseable response. "
+            f"⚠️ The Insight Agent returned degraded output for this run. "
+            f"The Gemini API may have timed out or returned an unparseable response. "
+            f"Error details: `{err_msg}`. "
             "Re-run the analysis for richer findings."
         )
 
