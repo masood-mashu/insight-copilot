@@ -11,7 +11,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from orchestrator.pipeline import run_pipeline
-from utils.qdrant_client import ensure_collection, get_qdrant_client
+from utils.qdrant_client import ensure_collection, fetch_dataset_history, get_qdrant_client
 
 load_dotenv()
 
@@ -125,25 +125,7 @@ def _fetch_history_from_qdrant() -> list[dict]:
     try:
         client = get_qdrant_client()
         ensure_collection(client)
-        scroll_result = client.scroll(
-            collection_name="insight_copilot_datasets",
-            with_payload=True,
-            with_vectors=False,
-            limit=100,
-        )
-        points = scroll_result[0] if isinstance(scroll_result, tuple) else scroll_result
-        history = []
-        for point in points:
-            payload = point.payload or {}
-            history.append(
-                {
-                    "signature": str(payload.get("dataset_signature", "unknown-dataset")),
-                    "timestamp": str(payload.get("timestamp", "")),
-                    "notes": str(payload.get("notes", "")),
-                }
-            )
-        history.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
-        return history
+        return fetch_dataset_history(client)
     except Exception:
         return []
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Any
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import uuid4
 
 from qdrant_client.http.models import PointStruct
 from sentence_transformers import SentenceTransformer
@@ -98,22 +98,24 @@ def run_memory_agent(profiler_output: dict) -> dict:
         }
 
 
-def update_memory_notes(profiler_output: dict, insight_summary: str, memory_point_id: str | None = None) -> None:
-    """Update the stored Qdrant point with a short insight summary for future recall."""
-    if not insight_summary:
+def update_memory_notes(insight_summary: str, memory_point_id: str | None = None) -> None:
+    """Update the stored Qdrant point with a short insight summary for future recall.
+
+    Requires a memory_point_id from a successful run_memory_agent call. If the
+    initial embed/store failed, no point exists in Qdrant to attach notes to,
+    so this is skipped rather than attempting a recomputed id that would
+    never match a stored point.
+    """
+    if not insight_summary or not memory_point_id:
         return
     try:
         client = get_qdrant_client()
-        point_id = memory_point_id
-        if not point_id:
-            signature_text = _build_signature_text(profiler_output)
-            point_id = str(uuid5(NAMESPACE_URL, signature_text))
         client.set_payload(
             collection_name=COLLECTION_NAME,
             payload={"notes": insight_summary[:200]},
-            points=[point_id],
+            points=[memory_point_id],
         )
-        logger.debug("Updated memory notes for point %s", point_id)
+        logger.debug("Updated memory notes for point %s", memory_point_id)
     except Exception:
         logger.exception("Failed to update memory notes")
 

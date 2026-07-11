@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-from typing import Any
 
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -13,13 +12,16 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from orchestrator.pipeline import run_pipeline
-from utils.qdrant_client import ensure_collection, get_qdrant_client
+from utils.qdrant_client import ensure_collection, fetch_dataset_history, get_qdrant_client
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 app = FastAPI(title="Insight Copilot API", version="0.1.0")
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_ROWS = 50_000
 
 
 @app.get("/health")
@@ -37,12 +39,23 @@ async def analyze_csv(file: UploadFile = File(...)) -> dict:
     raw_bytes = await file.read()
     if not raw_bytes.strip():
         raise HTTPException(status_code=400, detail="Uploaded CSV is empty")
+    if len(raw_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded CSV exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)}MB limit",
+        )
 
     try:
         df = pd.read_csv(io.BytesIO(raw_bytes))
     except Exception as exc:
         logger.exception("Failed to parse uploaded CSV")
         raise HTTPException(status_code=400, detail=f"Invalid CSV file: {exc}") from exc
+
+    if len(df) > MAX_ROWS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Uploaded CSV has {len(df)} rows, which exceeds the {MAX_ROWS}-row limit",
+        )
 
     try:
         report = await asyncio.to_thread(run_pipeline, df)
@@ -64,24 +77,7 @@ def memory_history() -> JSONResponse:
     try:
         client = get_qdrant_client()
         ensure_collection(client)
-        scroll_result = client.scroll(
-            collection_name="insight_copilot_datasets",
-            with_payload=True,
-            with_vectors=False,
-            limit=100,
-        )
-        points = scroll_result[0] if isinstance(scroll_result, tuple) else scroll_result
-        history = []
-        for point in points:
-            payload: dict[str, Any] = point.payload or {}
-            history.append(
-                {
-                    "signature": str(payload.get("dataset_signature", "unknown-dataset")),
-                    "timestamp": str(payload.get("timestamp", "")),
-                    "notes": str(payload.get("notes", "")),
-                }
-            )
-        history.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
+        history = fetch_dataset_history(client)
         return JSONResponse(content={"history": history})
     except Exception as exc:
         logger.exception("Failed to read memory history")

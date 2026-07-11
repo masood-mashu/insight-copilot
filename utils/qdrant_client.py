@@ -37,3 +37,35 @@ def ensure_collection(
         collection_name=collection_name,
         vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
     )
+
+
+def fetch_dataset_history(
+    client: QdrantClient,
+    collection_name: str = "insight_copilot_datasets",
+    limit: int = 100,
+) -> list[dict]:
+    """Fetch and format previously analyzed dataset signatures, newest first.
+
+    Shared by the FastAPI `/memory/history` route and the Streamlit sidebar so
+    both surfaces stay in sync instead of maintaining duplicate scroll logic.
+    """
+    scroll_result = client.scroll(
+        collection_name=collection_name,
+        with_payload=True,
+        with_vectors=False,
+        limit=limit,
+    )
+    points = scroll_result[0] if isinstance(scroll_result, tuple) else scroll_result
+
+    history = []
+    for point in points:
+        payload: dict = point.payload or {}
+        history.append(
+            {
+                "signature": str(payload.get("dataset_signature", "unknown-dataset")),
+                "timestamp": str(payload.get("timestamp", "")),
+                "notes": str(payload.get("notes", "")),
+            }
+        )
+    history.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
+    return history

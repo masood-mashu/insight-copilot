@@ -20,7 +20,7 @@ Insight Copilot is a multi-agent exploratory data analysis assistant built for a
 - Gemini via the supported `google-genai` SDK
 - Qdrant Cloud for vector memory
 - sentence-transformers for local embeddings
-- Async orchestration with a Lyzr-compatible wrapper point in the pipeline
+- Async orchestration; `orchestrator/pipeline.py` detects an installed `lyzr` package as a hook point for a future wrapper, but does not yet integrate with it
 
 ## Run locally
 
@@ -54,6 +54,12 @@ streamlit run app/streamlit_app.py
 
 For Hugging Face Spaces or Streamlit Cloud, deploy only the Streamlit app and set `USE_LOCAL_PIPELINE=true` in secrets. The FastAPI app remains available in the repo for local API testing and technical review, but the hosted demo does not need a second process.
 
+## Tests
+
+```bash
+pytest tests/
+```
+
 ## API endpoints
 
 - `GET /health`
@@ -65,4 +71,4 @@ For Hugging Face Spaces or Streamlit Cloud, deploy only the Streamlit app and se
 - The first live run of the memory agent may download the `all-MiniLM-L6-v2` embedding model.
 - Set `GEMINI_MODEL` in `.env` if you want to override the default Flash model name.
 - `agents/insight_agent.py` uses the current `google-genai` client with schema-constrained JSON responses to keep outputs aligned with the required contract.
-- In this workspace runtime, the published `lyzr` package is not installable because its available builds require Python versions below 3.12. The pipeline is written so a Lyzr wrapper can be added on a compatible runtime without restructuring the app.
+- In this workspace runtime, the published `lyzr` package is not installable because its available builds require Python versions below 3.12. `orchestrator/pipeline.py` only checks whether `lyzr` is importable and logs that fact; no actual Lyzr orchestration is wired in yet. The pipeline structure (single `run_pipeline` entry point, plain dict I/O) should make it straightforward to add a real wrapper on a compatible runtime later.

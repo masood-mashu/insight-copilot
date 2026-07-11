@@ -161,6 +161,24 @@ def _build_approach(
     )
 
 
+_TARGET_SUBSTRING_KEYWORDS = ("target", "label", "class", "outcome", "response")
+
+
+def _looks_like_target_name(normalized_name: str) -> bool:
+    """Return True if a column name looks like an ML target/label column.
+
+    Multi-character keywords use substring matching (safe, and needed to catch
+    snake_case names like 'target_label'). The single-letter 'y' keyword is
+    matched as a standalone token only, since substring matching on 'y' would
+    false-positive on any name containing that letter (city, salary, quantity,
+    type, category, ...).
+    """
+    if any(keyword in normalized_name for keyword in _TARGET_SUBSTRING_KEYWORDS):
+        return True
+    tokens = re.split(r"[^a-z0-9]+", normalized_name)
+    return "y" in tokens
+
+
 def _infer_target_hint(
     profiler_output: dict | None,
     findings: list[Any],
@@ -177,11 +195,10 @@ def _infer_target_hint(
         and 1 < int(column.get("unique_count", 0)) <= 10
     ]
     if categorical_candidates:
-        target_like_keywords = ("target", "label", "class", "outcome", "response", "y")
         for candidate in categorical_candidates:
             candidate_name = str(candidate.get("name", "label"))
             normalized_name = candidate_name.lower()
-            if any(keyword in normalized_name for keyword in target_like_keywords):
+            if _looks_like_target_name(normalized_name):
                 return {
                     "kind": "categorical_target",
                     "name": candidate_name,
@@ -199,7 +216,7 @@ def _infer_target_hint(
     if low_card_numeric:
         candidate = low_card_numeric[0]
         candidate_name = str(candidate.get("name", "label"))
-        if any(keyword in candidate_name.lower() for keyword in ("target", "label", "class", "outcome", "response", "y")):
+        if _looks_like_target_name(candidate_name.lower()):
             return {
                 "kind": "categorical_target",
                 "name": candidate_name,
